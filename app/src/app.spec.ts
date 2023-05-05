@@ -1,11 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { DataService } from './data.service';
-import * as dotenv from 'dotenv'
-dotenv.config()
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 describe('Main Application Tests', () => {
-
   let appController: AppController;
   let dataService: DataService;
 
@@ -16,7 +15,7 @@ describe('Main Application Tests', () => {
     }).compile();
 
     appController = app.get<AppController>(AppController);
-    dataService = app.get<DataService>(DataService) ;
+    dataService = app.get<DataService>(DataService);
   });
 
   describe('root', () => {
@@ -27,10 +26,9 @@ describe('Main Application Tests', () => {
 
   describe('Full Sync', () => {
     it('should download the repos and sync the db', async () => {
-      const output = await dataService.fullSync() ;
-      console.log(output) ;
+      const output = await dataService.fullSync();
+      console.log(output);
       //dataService.buildMainDataset() ;
     });
   });
-
 });

@@ -19,5 +19,4 @@ export class AppController {
   getGrantById(@Param('id') id): object {
     return this.dataService.getGrantById(id);
   }
-
 }

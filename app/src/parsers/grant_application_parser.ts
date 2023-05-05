@@ -1,291 +1,316 @@
 import GrantApplication from '../model/grant_application';
 import GrantMilestone from '../model/grant_milestone';
 import GrantStatus from '../model/grant_status';
-import {cleanString, parseGitLog, parseLinks} from './utils' ;
+import { cleanString, parseGitLog, parseLinks } from './utils';
 
-
-const CURRENCIES = ['usdt', 'usdc', 'bitcoin', 'btc', 'eth', 'dot', 'ksm', 'eur', 'usd']
-
+const CURRENCIES = [
+  'usdt',
+  'usdc',
+  'bitcoin',
+  'btc',
+  'eth',
+  'dot',
+  'ksm',
+  'eur',
+  'usd',
+];
 
 export default class GrantApplicationParser {
-
-  private text ;
-  private log ;
-  private result ;
+  private text;
+  private log;
+  private result;
 
   constructor(fileName, text, log) {
-    this.text = text ;
-    this.log = log ;
-    this.result = new GrantApplication() ;
-    this.result.fileName = fileName ;
-    this.parse() ;
+    this.text = text;
+    this.log = log;
+    this.result = new GrantApplication();
+    this.result.fileName = fileName;
+    this.parse();
   }
 
   parse() {
-    this.parseGitLog() ;
-    this.parseText() ;
+    this.parseGitLog();
+    this.parseText();
   }
 
   parseGitLog() {
-    const commits = parseGitLog(this.log) ;
-    this.result.pullRequest = commits[0].pullRequest ;
-    this.result.githubHistory = commits ;
-    this.result.githubUser = commits[0].authorName ;
-    this.result.status = new GrantStatus() ;
-    this.result.status.acceptDate = commits[0].date ;
-    if (commits.length>1) {
-        this.result.status.amendDates = commits.slice(1).map(x=>x.date) ;
+    const commits = parseGitLog(this.log);
+    this.result.pullRequest = commits[0].pullRequest;
+    this.result.githubHistory = commits;
+    this.result.githubUser = commits[0].authorName;
+    this.result.status = new GrantStatus();
+    this.result.status.acceptDate = commits[0].date;
+    if (commits.length > 1) {
+      this.result.status.amendDates = commits.slice(1).map((x) => x.date);
     } else {
-        this.result.status.amendDates = [] ;
+      this.result.status.amendDates = [];
     }
   }
 
   parseText() {
-    const lines = this.text.split('\n') ;
-    const firstLines = lines.slice(0,25) ;
-    this.result.projectName = this.findProjectName1(lines.slice(0,10)) ;
+    const lines = this.text.split('\n');
+    const firstLines = lines.slice(0, 25);
+    this.result.projectName = this.findProjectName1(lines.slice(0, 10));
     if (!this.result.projectName) {
-        this.result.projectName = this.findProjectName2(firstLines) ;
+      this.result.projectName = this.findProjectName2(firstLines);
     }
-    this.result.teamName = this.findTeamName(firstLines) ;
-    const paymentInfo = this.findPaymentInfo(firstLines) ;
-    this.result.paymentAddress = paymentInfo[0] ;
-    this.result.paymentCurrency = paymentInfo[1] ;
-    this.result.level = this.findLevel(firstLines) ;
-    const overviewStartsAt = this.findOverview(firstLines) ;
-    const overviewEndsAt = overviewStartsAt + 10 ;
-    var overviewLines = lines.slice(overviewStartsAt+1, overviewEndsAt) ;
+    this.result.teamName = this.findTeamName(firstLines);
+    const paymentInfo = this.findPaymentInfo(firstLines);
+    this.result.paymentAddress = paymentInfo[0];
+    this.result.paymentCurrency = paymentInfo[1];
+    this.result.level = this.findLevel(firstLines);
+    const overviewStartsAt = this.findOverview(firstLines);
+    const overviewEndsAt = overviewStartsAt + 10;
+    let overviewLines = lines.slice(overviewStartsAt + 1, overviewEndsAt);
     overviewLines = overviewLines.filter((line) => {
-        if (line.startsWith('#') && line.toLowerCase().includes('overview')) {
-            return false ;
-        }
-        return true ;
-    }) ;
-    this.result.abstract = overviewLines.join('\n') ;
-    const roadMapStartsAt = this.findRoadmap(lines) ;
+      if (line.startsWith('#') && line.toLowerCase().includes('overview')) {
+        return false;
+      }
+      return true;
+    });
+    this.result.abstract = overviewLines.join('\n');
+    const roadMapStartsAt = this.findRoadmap(lines);
     if (roadMapStartsAt) {
-        const roadmapLines = lines.slice(roadMapStartsAt) ;
-        this.parseRoadmap(roadmapLines) ;
+      const roadmapLines = lines.slice(roadMapStartsAt);
+      this.parseRoadmap(roadmapLines);
     }
-    this.result.links = parseLinks(this.text) ;
+    this.result.links = parseLinks(this.text);
   }
 
   parseRoadmap(lines) {
-    const [amount, currency] = this.findTotalCost(lines) ;
-    this.result.amount = amount ;
-    this.result.amountCurrency = currency ;
-    const milestoneIndices = this.findMilestones(lines) ;
-    this.result.milestones = [] ;
-    if (milestoneIndices.length>1) {
-        for (var i=0 ; i<(milestoneIndices.length-1) ; i++) {
-            const milestoneLines = lines.slice(milestoneIndices[i], milestoneIndices[i+1]) ;
-            const milestone = this.parseMilestone(i+1, milestoneLines) ;
-            this.result.milestones.push(milestone) ;
-        }
+    const [amount, currency] = this.findTotalCost(lines);
+    this.result.amount = amount;
+    this.result.amountCurrency = currency;
+    const milestoneIndices = this.findMilestones(lines);
+    this.result.milestones = [];
+    if (milestoneIndices.length > 1) {
+      for (let i = 0; i < milestoneIndices.length - 1; i++) {
+        const milestoneLines = lines.slice(
+          milestoneIndices[i],
+          milestoneIndices[i + 1],
+        );
+        const milestone = this.parseMilestone(i + 1, milestoneLines);
+        this.result.milestones.push(milestone);
+      }
     }
   }
 
   parseMilestone(number, lines) {
-    const milestone = new GrantMilestone() ;
-    milestone.number = number ;
-    milestone.title = lines[0].replaceAll('#', '').trim() ;
-    milestone.cost = this.findMilestoneCost(lines) ;
-    milestone.description = lines.join('\n') ;
-    return milestone ;
+    const milestone = new GrantMilestone();
+    milestone.number = number;
+    milestone.title = lines[0].replaceAll('#', '').trim();
+    milestone.cost = this.findMilestoneCost(lines);
+    milestone.description = lines.join('\n');
+    return milestone;
   }
 
   findProjectName1(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i] ;
-        if (line.toUpperCase().includes('PROJECT') && line.toUpperCase().includes('NAME')) {
-            line = line.replace(/project/ig, ' ') ;
-            line = line.replace(/name/ig, ' ') ;
-            line = cleanString(line) ;
-            if (line.length<100) {
-                return line ;
-            }
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      if (
+        line.toUpperCase().includes('PROJECT') &&
+        line.toUpperCase().includes('NAME')
+      ) {
+        line = line.replace(/project/gi, ' ');
+        line = line.replace(/name/gi, ' ');
+        line = cleanString(line);
+        if (line.length < 100) {
+          return line;
         }
+      }
     }
-    return null ;
+    return null;
   }
 
   findProjectName2(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        const line = lines[i] ;
-        if (line.startsWith('#')) {
-            const title = line.replaceAll('#', '').trim() ;
-            if (title!='W3F Grant Proposal') {
-                return title ;
-            }
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('#')) {
+        const title = line.replaceAll('#', '').trim();
+        if (title != 'W3F Grant Proposal') {
+          return title;
         }
+      }
     }
-    return null ;
+    return null;
   }
 
   findTeamName(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i] ;
-        if (line.toUpperCase().includes('TEAM') || line.toUpperCase().includes('PROPOSER')) {
-            line = line.replace(/team/ig, ' ') ;
-            line = line.replace(/name/ig, ' ') ;
-            line = line.replace(/proposer/ig, ' ') ;
-            line = cleanString(line) ;
-            return line ;
-        }
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      if (
+        line.toUpperCase().includes('TEAM') ||
+        line.toUpperCase().includes('PROPOSER')
+      ) {
+        line = line.replace(/team/gi, ' ');
+        line = line.replace(/name/gi, ' ');
+        line = line.replace(/proposer/gi, ' ');
+        line = cleanString(line);
+        return line;
+      }
     }
-    return null ;
+    return null;
   }
 
   findPaymentInfo(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        if (line.includes('payment') || line.includes('address')) {
-            line = line.replace('payment', ' ') ;
-            line = line.replace('address', ' ') ;
-            line = line.replace('ethereum', ' ') ;
-            line = line.replace('erc20', ' ') ;
-            line = cleanString(line) ;
-            //console.log('findPaymentInfo: '+line) ;
-            const parts = line.split(' ') ;
-            const address = this.findAddress(parts) ;
-            const currency = this.findCurrency(parts) ;
-            return [address,currency] ;
-        }
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].toLowerCase();
+      if (line.includes('payment') || line.includes('address')) {
+        line = line.replace('payment', ' ');
+        line = line.replace('address', ' ');
+        line = line.replace('ethereum', ' ');
+        line = line.replace('erc20', ' ');
+        line = cleanString(line);
+        //console.log('findPaymentInfo: '+line) ;
+        const parts = line.split(' ');
+        const address = this.findAddress(parts);
+        const currency = this.findCurrency(parts);
+        return [address, currency];
+      }
     }
-    return [null,null] ;
+    return [null, null];
   }
 
   findAddress(parts) {
-    for (var i in parts) {
-        var s = parts[i] ;
-        // TODO: Add more tests here to detect well formed addresses
-        if (s.length>16) {
-            return s ;
-        }
+    for (const i in parts) {
+      const s = parts[i];
+      // TODO: Add more tests here to detect well formed addresses
+      if (s.length > 16) {
+        return s;
+      }
     }
-    return null ;
+    return null;
   }
 
   findCurrency(parts) {
-    for (var i in parts) {
-        var s = parts[i] ;
-        if (CURRENCIES.includes(s)) {
-            return s.toUpperCase() ;
-        }
+    for (const i in parts) {
+      const s = parts[i];
+      if (CURRENCIES.includes(s)) {
+        return s.toUpperCase();
+      }
     }
-    return null ;
+    return null;
   }
 
   findAmount(parts) {
-    for (var i in parts) {
-        var s = parts[i].replaceAll(',', '') ;
-        try {
-            const amount = Math.floor(s) ;
-            if (amount) {
-                return amount ;
-            }
-        } catch (e) {}
+    for (const i in parts) {
+      const s = parts[i].replaceAll(',', '');
+      try {
+        const amount = Math.floor(s);
+        if (amount) {
+          return amount;
+        }
+      } catch (e) {}
     }
-    return null ;
+    return null;
   }
 
   findLevel(lines) {
-    const LEVELS = [1,2,3] ;
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        if (line.includes('level')) {
-            const index=line.indexOf(':**') ;
-            line = line.substring(index) ;
-            line = cleanString(line) ;
-            const level = parseInt(line) ;
-            if (LEVELS.includes(level)) {
-                return level ;
-            }
+    const LEVELS = [1, 2, 3];
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].toLowerCase();
+      if (line.includes('level')) {
+        const index = line.indexOf(':**');
+        line = line.substring(index);
+        line = cleanString(line);
+        const level = parseInt(line);
+        if (LEVELS.includes(level)) {
+          return level;
         }
+      }
     }
-    return null ;
+    return null;
   }
 
   findOverview(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        if ( line.startsWith('#') && (line.includes('overview') || line.includes('description')) ) {
-            return i ;
-        }
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].toLowerCase();
+      if (
+        line.startsWith('#') &&
+        (line.includes('overview') || line.includes('description'))
+      ) {
+        return i;
+      }
     }
-    return 0 ;
+    return 0;
   }
 
   findRoadmap(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        if ( line.startsWith('#') && (line.includes('roadmap') || line.includes(':nut_and_bolt:')) ) {
-            return i ;
-        }
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].toLowerCase();
+      if (
+        line.startsWith('#') &&
+        (line.includes('roadmap') || line.includes(':nut_and_bolt:'))
+      ) {
+        return i;
+      }
     }
-    return null ;
+    return null;
   }
 
   findTotalCost(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        if (line.includes('total') && line.includes('cost')) {
-            const index=line.indexOf(':**') ;
-            line = line.substring(index+3) ;
-            line = cleanString(line) ;
-            const parts = line.split(' ') ;
-            const amount = this.findAmount(parts) ;
-            const currency = this.findCurrency(parts) ;
-            if (amount) {
-                return [amount,currency] ;
-            }
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].toLowerCase();
+      if (line.includes('total') && line.includes('cost')) {
+        const index = line.indexOf(':**');
+        line = line.substring(index + 3);
+        line = cleanString(line);
+        const parts = line.split(' ');
+        const amount = this.findAmount(parts);
+        const currency = this.findCurrency(parts);
+        if (amount) {
+          return [amount, currency];
         }
+      }
     }
-    return [null,null] ;
+    return [null, null];
   }
 
   findMilestones(lines) {
-    const ans = [] ;
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        line = line.replaceAll('*', '') ;
-        line = line.replaceAll(' ', '') ;
-        if (line.startsWith('##milestone') || line.startsWith('###milestone') || line.startsWith('####milestone')) {
-            ans.push(i) ;
-        }
+    const ans = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].toLowerCase();
+      line = line.replaceAll('*', '');
+      line = line.replaceAll(' ', '');
+      if (
+        line.startsWith('##milestone') ||
+        line.startsWith('###milestone') ||
+        line.startsWith('####milestone')
+      ) {
+        ans.push(i);
+      }
     }
-    if (ans.length>0) {
-        const lastIndex = ans[ans.length-1] ;
-        for (i=lastIndex+5 ; i<lines.length ; i++) {
-            line = lines[i].toLowerCase() ;
-            if (line.startsWith('#')) {
-                ans.push(i) ;
-                return ans ;
-            }
+    if (ans.length > 0) {
+      const lastIndex = ans[ans.length - 1];
+      for (i = lastIndex + 5; i < lines.length; i++) {
+        line = lines[i].toLowerCase();
+        if (line.startsWith('#')) {
+          ans.push(i);
+          return ans;
         }
+      }
     }
-    ans.push(lines.length) ;
-    return ans ;
+    ans.push(lines.length);
+    return ans;
   }
 
   findMilestoneCost(lines) {
-    for (var i=0 ; i<lines.length ; i++) {
-        var line = lines[i].toLowerCase() ;
-        if (line.includes('cost')) {
-            const index=line.indexOf(':**') ;
-            line = line.substring(index+3) ;
-            line = cleanString(line) ;
-            const amount = this.findAmount(line.split(' ')) ;
-            if (amount) {
-                return amount ;
-            }
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].toLowerCase();
+      if (line.includes('cost')) {
+        const index = line.indexOf(':**');
+        line = line.substring(index + 3);
+        line = cleanString(line);
+        const amount = this.findAmount(line.split(' '));
+        if (amount) {
+          return amount;
         }
+      }
     }
-    return null ;
+    return null;
   }
 
   getResult() {
-    return this.result ;
+    return this.result;
   }
-
 }

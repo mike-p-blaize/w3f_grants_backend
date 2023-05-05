@@ -1,18 +1,14 @@
-
-
 export default class Evaluation {
+  public fileName;
+  public evaluator;
+  public milestoneNumber;
+  public applicationFile;
 
-  public fileName ;
-  public evaluator ;
-  public milestoneNumber ;
-  public applicationFile ;
+  public githubHistory;
+  public githubUser;
+  public mergeDate;
 
-  public githubHistory ;
-  public githubUser ;
-  public mergeDate ;
-
-  public status ;
-  public content ;
-  public links ;
-
+  public status;
+  public content;
+  public links;
 }

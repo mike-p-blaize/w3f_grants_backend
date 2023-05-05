@@ -1,8 +1,4 @@
-
-
 export default class Link {
-
-  public title ;
-  public url ;
-
+  public title;
+  public url;
 }
